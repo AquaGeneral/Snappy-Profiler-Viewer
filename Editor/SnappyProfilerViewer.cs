@@ -9,17 +9,8 @@ using UnityEditorInternal;
 using UnityEngine;
 
 public class SnappyProfilerViewer : EditorWindow {
-    private static readonly GUIContent[] headers = new GUIContent[] {
-        new GUIContent("Function Name"),
-        new GUIContent("Total %"),
-        new GUIContent("Self %"),
-        new GUIContent("Calls"),
-        new GUIContent("GC Alloc"),
-        new GUIContent("Total Time"),
-        new GUIContent("Self Time")
-    };
     // The fixed width for the columns such as "Calls" and "Self Time", which are numerical
-    private const float numericalDataColumnWidth = 68f;
+    private const float numericalDataColumnWidth = 75f;
 
     private List<ProfilerRowInfo> cachedProfilerProperties = new List<ProfilerRowInfo>();
     private ProfilerProperty profilerProperty;
@@ -38,15 +29,87 @@ public class SnappyProfilerViewer : EditorWindow {
         }
     }
     
+    private float cellHeight;
     private Rect columnHeadersRect;
-    private float leftOffset = 0f;
+    private float headerLeftOffset = 0f;
+    private float cellTopOffset;
+    private float cellLeftOffset;
+    private float functionNameCellWidth;
+
+    private Texture2D frameIntensityTexture;
+
+    private static readonly Color peakIntensityColour = new Color(1f, 0.85f, 0f, 1f);
 
     [MenuItem("Jesse Stiller/Snappy Profiler Viewer...")]
     private static void CreateAndShow() {
         GetWindow<SnappyProfilerViewer>(false, "Snappy", true);
     }
 
+    private void OnFocus() {
+        int numberOfFrames = ProfilerDriver.lastFrameIndex - ProfilerDriver.firstFrameIndex;
+        frameIntensityTexture = new Texture2D(Screen.width, 1);
+        
+        float frameTimeTotal = 0f;
+        float[] frameIntensities = new float[numberOfFrames];
+
+        for(int f = 0; f < numberOfFrames; f++) {
+            ProfilerProperty property = new ProfilerProperty();
+            property.SetRoot(f + ProfilerDriver.firstFrameIndex, ProfilerColumn.DontSort, ProfilerViewType.RawHierarchy);
+
+            frameIntensities[f] = float.Parse(property.frameTime);
+            frameTimeTotal += frameIntensities[f];
+
+            //int numberOfProperties = 0;
+            //while(property.Next(true)) {
+            //    numberOfProperties++;
+            //}
+            //frameIntensities[f] = numberOfProperties;
+        }
+
+        //for(int f = 0; f < numberOfFrames; f++) {
+        //    float coefficient = (float)System.Math.Log(frameIntensities[f], frameTimeTotal);
+        //    //float coefficient = (frameIntensities[f] / frameTimeTotal) * 10f;
+        //    frameIntensityTexture.SetPixel(f, 0, new Color(coefficient, coefficient, coefficient, 1f));
+        //}
+
+        float frameSize = 1f / (numberOfFrames - 1);
+
+        for(int i = 0; i < Screen.width; i++) {
+            float coefficient = (float)i / Screen.width;
+            int closestFrame = Mathf.RoundToInt(coefficient * (numberOfFrames - 1));
+            int secondClosestFrame;
+            if(System.Math.Truncate(coefficient) >= 0.5f) {
+                secondClosestFrame = closestFrame + 1;
+                if(secondClosestFrame > numberOfFrames) secondClosestFrame -= 2;
+            } else {
+                secondClosestFrame = closestFrame - 1;
+                if(secondClosestFrame < 0) secondClosestFrame += 2;
+            }
+
+            float closestFramePosition = (float)closestFrame / numberOfFrames;
+            float secondClosestFramePosition = (float)secondClosestFrame / numberOfFrames;
+
+            float t = (closestFramePosition - coefficient) / frameSize;
+
+            float closestIntensity = frameIntensities[closestFrame];
+            float secondClosestIntensity = frameIntensities[secondClosestFrame];
+
+            frameIntensityTexture.SetPixel(i, 0, 
+                Color.Lerp(
+                    Color.Lerp(Color.black, peakIntensityColour, (float)System.Math.Log(frameIntensities[secondClosestFrame] * 2f, frameTimeTotal)),
+                    Color.Lerp(Color.black, peakIntensityColour, (float)System.Math.Log(frameIntensities[closestFrame] * 2f, frameTimeTotal))
+                    //Color.Lerp(Color.black, peakIntensityColour, (float)System.Math.Log(frameIntensities[secondClosestFrame], frameTimeTotal)), 
+                    //Color.Lerp(Color.black, peakIntensityColour, (float)System.Math.Log(frameIntensities[closestFrame], frameTimeTotal))
+                , t));
+        }
+
+        frameIntensityTexture.Apply();
+    }
+    
     private void OnGUI() {
+        Rect frameIntensityRect = EditorGUILayout.GetControlRect(GUILayout.Height(40f));
+        EditorGUI.DrawPreviewTexture(frameIntensityRect, frameIntensityTexture);
+
         if(rightAlignedLabel == null) {
             rightAlignedLabel = new GUIStyle(GUI.skin.label);
             rightAlignedLabel.alignment = TextAnchor.MiddleRight;
@@ -62,7 +125,7 @@ public class SnappyProfilerViewer : EditorWindow {
         }
         if(evenRowStyle == null) evenRowStyle = new GUIStyle("OL EntryBackEven");
         if(oddRowStyle == null) oddRowStyle = new GUIStyle("OL EntryBackOdd");
-
+        
         if(ProfilerDriver.firstFrameIndex == -1) {
             EditorGUILayout.HelpBox("Begin profiling to have data to view.", MessageType.Warning);
             return;
@@ -83,75 +146,67 @@ public class SnappyProfilerViewer : EditorWindow {
 
         EditorGUILayout.LabelField("Properties", cachedProfilerProperties.Count.ToString("N0"));
         
-        float height = GUI.skin.label.CalcHeight(new GUIContent("Rubbish"), 200f);
+        cellHeight = GUI.skin.label.CalcHeight(new GUIContent("Rubbish"), 200f);
 
         /**
         * Draw the column headers
         */
-        leftOffset = 0f;
+        headerLeftOffset = 0f;
         columnHeadersRect = EditorGUILayout.GetControlRect(GUILayout.ExpandWidth(true));
         columnHeadersRect.width -= 15f; // Account for the width of the vertical scrollbar
         float functionNameHeaderWidth = columnHeadersRect.width - numericalDataColumnWidth * 6f;
         float columnHeadersLeft = columnHeadersRect.x;
         
-        DrawColumnHeader("Function Name", ProfilerColumn.FunctionName, functionNameHeaderWidth);
-        DrawColumnHeader("Total %", ProfilerColumn.TotalPercent, numericalDataColumnWidth);
-        DrawColumnHeader("Self %", ProfilerColumn.SelfPercent, numericalDataColumnWidth);
-        DrawColumnHeader("Calls %", ProfilerColumn.Calls, numericalDataColumnWidth);
-        DrawColumnHeader("GC Memory %", ProfilerColumn.GCMemory, numericalDataColumnWidth);
-        DrawColumnHeader("Total Time", ProfilerColumn.TotalTime, numericalDataColumnWidth);
-        DrawColumnHeader("Self Time", ProfilerColumn.SelfTime, numericalDataColumnWidth);
+        DrawColumnHeader("Function Name", ProfilerColumn.FunctionName, functionNameHeaderWidth, columnHeadersStyleLeft);
+        DrawColumnHeader("Total %", ProfilerColumn.TotalPercent, numericalDataColumnWidth, columnHeadersStyleCentered);
+        DrawColumnHeader("Self %", ProfilerColumn.SelfPercent, numericalDataColumnWidth, columnHeadersStyleCentered);
+        DrawColumnHeader("Calls %", ProfilerColumn.Calls, numericalDataColumnWidth, columnHeadersStyleCentered);
+        DrawColumnHeader("GC Alloc", ProfilerColumn.GCMemory, numericalDataColumnWidth, columnHeadersStyleCentered);
+        DrawColumnHeader("Total Time", ProfilerColumn.TotalTime, numericalDataColumnWidth, columnHeadersStyleCentered);
+        DrawColumnHeader("Self Time", ProfilerColumn.SelfTime, numericalDataColumnWidth, columnHeadersStyleCentered);
         
         Rect scrollViewRect = EditorGUILayout.GetControlRect(new GUILayoutOption[] { GUILayout.ExpandWidth(true), GUILayout.ExpandHeight(true) });
-        Rect viewRect = new Rect(scrollViewRect.x, scrollViewRect.y, scrollViewRect.width, height * cachedProfilerProperties.Count);
+        Rect viewRect = new Rect(scrollViewRect.x, scrollViewRect.y, scrollViewRect.width, cellHeight * cachedProfilerProperties.Count);
         scrollPosition = GUI.BeginScrollView(scrollViewRect, scrollPosition, viewRect);
 
-        int firstVisibleProperty = Mathf.Max(Mathf.CeilToInt(scrollPosition.y / height) - 1, 0);
-        int lastVisibleProperty = Mathf.Min(firstVisibleProperty + Mathf.CeilToInt(scrollViewRect.height / height + 1), cachedProfilerProperties.Count);
+        int firstVisibleProperty = Mathf.Max(Mathf.CeilToInt(scrollPosition.y / cellHeight) - 1, 0);
+        int lastVisibleProperty = Mathf.Min(firstVisibleProperty + Mathf.CeilToInt(scrollViewRect.height / cellHeight + 1), cachedProfilerProperties.Count);
         
         if(Event.current.type == EventType.Repaint) {
             for(int i = firstVisibleProperty; i < lastVisibleProperty; i++) {
-                float cellTopOffset = i * height + 56f;
+                cellTopOffset = i * cellHeight + columnHeadersRect.y + cellHeight + 2f;
 
                 // Background
                 GUIStyle backgroundStyle = (i % 2 == 0 ? evenRowStyle : oddRowStyle);
-                backgroundStyle.Draw(new Rect(0f, cellTopOffset, scrollViewRect.width, height), GUIContent.none, 0);
+                backgroundStyle.Draw(new Rect(0f, cellTopOffset, scrollViewRect.width, cellHeight), GUIContent.none, 0);
 
-                float cellLeftOffset = (cachedProfilerProperties[i].depth - 1) * 15f + 4f;
-                float functionNameCellWidth = functionNameHeaderWidth - (cachedProfilerProperties[i].depth - 1) * 15f;
-                
-                // Funtion Name
-                EditorGUI.LabelField(new Rect(cellLeftOffset, cellTopOffset, functionNameCellWidth, height), cachedProfilerProperties[i].functionName);
+                cellLeftOffset = (cachedProfilerProperties[i].depth - 1) * 15f + 4f;
+                functionNameCellWidth = functionNameHeaderWidth - (cachedProfilerProperties[i].depth - 1) * 15f;
 
-                cellLeftOffset += functionNameCellWidth;
-                EditorGUI.LabelField(new Rect(cellLeftOffset, cellTopOffset, numericalDataColumnWidth, height), cachedProfilerProperties[i].totalPercent, rightAlignedLabel);
-
-                cellLeftOffset += numericalDataColumnWidth;
-                EditorGUI.LabelField(new Rect(cellLeftOffset, cellTopOffset, numericalDataColumnWidth, height), cachedProfilerProperties[i].selfPercent, rightAlignedLabel);
-
-                cellLeftOffset += numericalDataColumnWidth;
-                EditorGUI.LabelField(new Rect(cellLeftOffset, cellTopOffset, numericalDataColumnWidth, height), cachedProfilerProperties[i].calls, rightAlignedLabel);
-
-                cellLeftOffset += numericalDataColumnWidth;
-                EditorGUI.LabelField(new Rect(cellLeftOffset, cellTopOffset, numericalDataColumnWidth, height), cachedProfilerProperties[i].gcMemory, rightAlignedLabel);
-
-                cellLeftOffset += numericalDataColumnWidth;
-                EditorGUI.LabelField(new Rect(cellLeftOffset, cellTopOffset, numericalDataColumnWidth, height), cachedProfilerProperties[i].totalTime, rightAlignedLabel);
-
-                cellLeftOffset += numericalDataColumnWidth;
-                EditorGUI.LabelField(new Rect(cellLeftOffset, cellTopOffset, numericalDataColumnWidth, height), cachedProfilerProperties[i].selfTime, rightAlignedLabel);
+                DrawDataCell(cachedProfilerProperties[i].functionName, functionNameCellWidth, GUI.skin.label);
+                DrawDataCell(cachedProfilerProperties[i].totalPercent, numericalDataColumnWidth, rightAlignedLabel);
+                DrawDataCell(cachedProfilerProperties[i].selfPercent, numericalDataColumnWidth, rightAlignedLabel);
+                DrawDataCell(cachedProfilerProperties[i].calls, numericalDataColumnWidth, rightAlignedLabel);
+                DrawDataCell(cachedProfilerProperties[i].gcMemory, numericalDataColumnWidth, rightAlignedLabel);
+                DrawDataCell(cachedProfilerProperties[i].totalTime, numericalDataColumnWidth, rightAlignedLabel);
+                DrawDataCell(cachedProfilerProperties[i].selfTime, numericalDataColumnWidth, rightAlignedLabel);
             }
         }
         GUI.EndScrollView();
     }
-    
-    private void DrawColumnHeader(string label, ProfilerColumn column, float width) {
-        bool toggleResult = GUI.Toggle(new Rect(leftOffset, columnHeadersRect.y, width, columnHeadersRect.height),
-            columnToSort == column, label, columnHeadersStyleLeft);
+
+    private void DrawDataCell(string data, float width, GUIStyle style) {
+        EditorGUI.LabelField(new Rect(cellLeftOffset, cellTopOffset, width, cellHeight), data, style);
+        cellLeftOffset += width;
+    }
+
+    private void DrawColumnHeader(string label, ProfilerColumn column, float width, GUIStyle style) {
+        bool toggleResult = GUI.Toggle(new Rect(headerLeftOffset, columnHeadersRect.y, width, columnHeadersRect.height),
+            columnToSort == column, label, style);
 
         if(toggleResult == true) ColumnToSort = column;
 
-        leftOffset += width;
+        headerLeftOffset += width;
     }
 
     private void ColumnToSortChanged() {
