@@ -14,7 +14,17 @@ public class SnappyProfilerViewer : EditorWindow {
 
     private List<ProfilerRowInfo> cachedProfilerProperties = new List<ProfilerRowInfo>();
     private ProfilerProperty profilerProperty;
-    private int frameIndex = 0;
+    private int selectedFrame = 0;
+    private int SelectedFrame {
+        get {
+            return selectedFrame;
+        }
+        set {
+            if(value == selectedFrame) return;
+            selectedFrame = Mathf.Clamp(value, ProfilerDriver.firstFrameIndex, ProfilerDriver.lastFrameIndex);
+            UpdateProperties();
+        }
+    }
     
     private Vector2 scrollPosition;
 
@@ -25,7 +35,7 @@ public class SnappyProfilerViewer : EditorWindow {
         set {
             if(value == columnToSort) return;
             columnToSort = value;
-            ColumnToSortChanged();
+            UpdateProperties();
         }
     }
     
@@ -36,9 +46,10 @@ public class SnappyProfilerViewer : EditorWindow {
     private float cellLeftOffset;
     private float functionNameCellWidth;
 
-    private Texture2D frameIntensityTexture;
+    private Texture2D frameTimeGraphTexture;
 
     private static readonly Color peakIntensityColour = new Color(1f, 0.85f, 0f, 1f);
+    private readonly int scrubberHash = "Scrubber".GetHashCode();
 
     [MenuItem("Jesse Stiller/Snappy Profiler Viewer...")]
     private static void CreateAndShow() {
@@ -47,10 +58,12 @@ public class SnappyProfilerViewer : EditorWindow {
 
     private void OnFocus() {
         int numberOfFrames = ProfilerDriver.lastFrameIndex - ProfilerDriver.firstFrameIndex;
-        frameIntensityTexture = new Texture2D(Screen.width, 1);
+        frameTimeGraphTexture = new Texture2D(Screen.width, 1);
         
         float frameTimeTotal = 0f;
         float[] frameIntensities = new float[numberOfFrames];
+        float[] frameIntensitiesScreenWidth = new float[Screen.width];
+        float[] bloom = new float[Screen.width];
 
         for(int f = 0; f < numberOfFrames; f++) {
             ProfilerProperty property = new ProfilerProperty();
@@ -58,21 +71,12 @@ public class SnappyProfilerViewer : EditorWindow {
 
             frameIntensities[f] = float.Parse(property.frameTime);
             frameTimeTotal += frameIntensities[f];
-
-            //int numberOfProperties = 0;
-            //while(property.Next(true)) {
-            //    numberOfProperties++;
-            //}
-            //frameIntensities[f] = numberOfProperties;
         }
-
-        //for(int f = 0; f < numberOfFrames; f++) {
-        //    float coefficient = (float)System.Math.Log(frameIntensities[f], frameTimeTotal);
-        //    //float coefficient = (frameIntensities[f] / frameTimeTotal) * 10f;
-        //    frameIntensityTexture.SetPixel(f, 0, new Color(coefficient, coefficient, coefficient, 1f));
-        //}
-
+        
         float frameSize = 1f / (numberOfFrames - 1);
+
+        float minFrameTime = float.MaxValue;
+        float maxFrameTime = float.MinValue;
 
         for(int i = 0; i < Screen.width; i++) {
             float coefficient = (float)i / Screen.width;
@@ -87,28 +91,78 @@ public class SnappyProfilerViewer : EditorWindow {
             }
 
             float closestFramePosition = (float)closestFrame / numberOfFrames;
-            float secondClosestFramePosition = (float)secondClosestFrame / numberOfFrames;
 
             float t = (closestFramePosition - coefficient) / frameSize;
 
             float closestIntensity = frameIntensities[closestFrame];
             float secondClosestIntensity = frameIntensities[secondClosestFrame];
 
-            frameIntensityTexture.SetPixel(i, 0, 
-                Color.Lerp(
-                    Color.Lerp(Color.black, peakIntensityColour, (float)System.Math.Log(frameIntensities[secondClosestFrame] * 2f, frameTimeTotal)),
-                    Color.Lerp(Color.black, peakIntensityColour, (float)System.Math.Log(frameIntensities[closestFrame] * 2f, frameTimeTotal))
-                    //Color.Lerp(Color.black, peakIntensityColour, (float)System.Math.Log(frameIntensities[secondClosestFrame], frameTimeTotal)), 
-                    //Color.Lerp(Color.black, peakIntensityColour, (float)System.Math.Log(frameIntensities[closestFrame], frameTimeTotal))
-                , t));
+            float interpolatedIntensity = Mathf.Lerp(closestIntensity, secondClosestIntensity, t);
+            
+            frameIntensitiesScreenWidth[i] = interpolatedIntensity;
+
+            if(frameIntensitiesScreenWidth[i] < minFrameTime) minFrameTime = frameIntensitiesScreenWidth[i];
+            if(frameIntensitiesScreenWidth[i] > maxFrameTime) maxFrameTime = frameIntensitiesScreenWidth[i];
         }
 
-        frameIntensityTexture.Apply();
+        for(int i = 0; i < Screen.width; i++) {
+            frameIntensitiesScreenWidth[i] = ((frameIntensitiesScreenWidth[i] - minFrameTime) / (maxFrameTime - minFrameTime));
+
+            float value;
+            if(frameIntensitiesScreenWidth[i] < 0.4f) {
+                value = frameIntensitiesScreenWidth[i] / 0.4f;
+            } else {
+                value = 1f;
+            }
+            frameTimeGraphTexture.SetPixel(i, 0, Color.Lerp(Color.red, Color.yellow, frameIntensitiesScreenWidth[i]) * value);
+        }
+
+        frameTimeGraphTexture.Apply();
     }
     
     private void OnGUI() {
-        Rect frameIntensityRect = EditorGUILayout.GetControlRect(GUILayout.Height(40f));
-        EditorGUI.DrawPreviewTexture(frameIntensityRect, frameIntensityTexture);
+        /**
+        * Frame scrubber and frame time colour graph
+        */
+        Rect frameTimeGraphTextureRect = EditorGUILayout.GetControlRect(GUILayout.Height(40f));
+        int scrubberControlID = GUIUtility.GetControlID(scrubberHash, FocusType.Keyboard, frameTimeGraphTextureRect);
+
+        int numberOfFrames = ProfilerDriver.lastFrameIndex - ProfilerDriver.firstFrameIndex;
+
+        Event current = Event.current;
+
+        if(current.type == EventType.Repaint) {
+            EditorGUI.DrawPreviewTexture(frameTimeGraphTextureRect, frameTimeGraphTexture);
+        }
+
+        switch(current.GetTypeForControl(scrubberControlID)) {
+            case EventType.MouseDown:
+                if(frameTimeGraphTextureRect.Contains(current.mousePosition)) {
+                    GUIUtility.hotControl = scrubberControlID;
+                } else {
+                    GUIUtility.hotControl = 0;
+                }
+                break;
+        }
+
+        if(GUIUtility.hotControl == scrubberControlID) {
+            switch(current.type) {
+                case EventType.MouseDrag:
+                case EventType.MouseUp:
+                    SelectedFrame = Mathf.RoundToInt((current.mousePosition.x / Screen.width) * numberOfFrames) + ProfilerDriver.firstFrameIndex;
+                    break;
+            }
+
+            if(current.isKey && current.type != EventType.KeyUp) {
+                if(current.keyCode == KeyCode.LeftArrow) SelectedFrame = Mathf.Max(SelectedFrame - 1, 0);
+                if(current.keyCode == KeyCode.RightArrow) SelectedFrame = Mathf.Min(SelectedFrame + 1, ProfilerDriver.lastFrameIndex);
+            }
+        }
+        
+        // Frame cursor/scrubber
+        float scrubberLeftOffset = (((float)SelectedFrame - ProfilerDriver.firstFrameIndex) / numberOfFrames) * Screen.width - 2.5f;
+
+        EditorGUI.DrawRect(new Rect(scrubberLeftOffset, frameTimeGraphTextureRect.y, 5f, 40f), Color.grey);
 
         if(rightAlignedLabel == null) {
             rightAlignedLabel = new GUIStyle(GUI.skin.label);
@@ -132,16 +186,10 @@ public class SnappyProfilerViewer : EditorWindow {
         }
 
         if(profilerProperty == null) {
-            frameIndex = ProfilerDriver.firstFrameIndex;
+            SelectedFrame = ProfilerDriver.firstFrameIndex;
             UpdateProperties();
         }
-
-        EditorGUI.BeginChangeCheck();
-        frameIndex = EditorGUILayout.IntSlider("Frame", frameIndex, ProfilerDriver.firstFrameIndex, ProfilerDriver.lastFrameIndex);
-        if(EditorGUI.EndChangeCheck()) {
-            UpdateProperties();
-        }
-
+        
         if(profilerProperty.frameDataReady == false) return;
 
         EditorGUILayout.LabelField("Properties", cachedProfilerProperties.Count.ToString("N0"));
@@ -209,13 +257,9 @@ public class SnappyProfilerViewer : EditorWindow {
         headerLeftOffset += width;
     }
 
-    private void ColumnToSortChanged() {
-        UpdateProperties();
-    }
-
     private void UpdateProperties() {
         profilerProperty = new ProfilerProperty();
-        profilerProperty.SetRoot(frameIndex, columnToSort, ProfilerViewType.Hierarchy);
+        profilerProperty.SetRoot(SelectedFrame, columnToSort, ProfilerViewType.Hierarchy);
         profilerProperty.onlyShowGPUSamples = false;
 
         cachedProfilerProperties.Clear();
@@ -223,6 +267,8 @@ public class SnappyProfilerViewer : EditorWindow {
         while(profilerProperty.Next(true)) {
             cachedProfilerProperties.Add(new ProfilerRowInfo(profilerProperty));
         }
+
+        Repaint();
     }
 
     private struct ProfilerRowInfo {
