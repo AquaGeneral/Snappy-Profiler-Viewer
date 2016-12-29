@@ -12,6 +12,9 @@ public class SnappyProfilerViewer : EditorWindow {
     // The fixed width for the columns such as "Calls" and "Self Time", which are numerical
     private const float numericalDataColumnWidth = 75f;
 
+    private static readonly int scrubberHash = "Scrubber".GetHashCode();
+    private static GUIStyle profilerLabelStyle, rightAlignedLabel, columnHeadersStyleLeft, columnHeadersStyleCentered, evenRowStyle, oddRowStyle;
+
     private List<ProfilerRowInfo> cachedProfilerProperties = new List<ProfilerRowInfo>();
     private ProfilerProperty profilerProperty;
     private int selectedFrame = 0;
@@ -25,11 +28,10 @@ public class SnappyProfilerViewer : EditorWindow {
             UpdateProperties();
         }
     }
-    
+    private int selectedProperty;
+
     private Vector2 scrollPosition;
-
-    private static GUIStyle rightAlignedLabel, columnHeadersStyleLeft, columnHeadersStyleCentered, evenRowStyle, oddRowStyle;
-
+    
     private ProfilerColumn columnToSort = ProfilerColumn.TotalTime;
     private ProfilerColumn ColumnToSort {
         set {
@@ -47,10 +49,7 @@ public class SnappyProfilerViewer : EditorWindow {
     private float functionNameCellWidth;
 
     private Texture2D frameTimeGraphTexture;
-
-    private static readonly Color peakIntensityColour = new Color(1f, 0.85f, 0f, 1f);
-    private readonly int scrubberHash = "Scrubber".GetHashCode();
-
+    
     private int previousFirstFrameIndex = -1;
     private int previousLastFrameIndex = -1;
 
@@ -62,6 +61,26 @@ public class SnappyProfilerViewer : EditorWindow {
     }
     
     private void OnGUI() {
+        /**
+        * GUIStyles initialization
+        */
+        if(profilerLabelStyle == null) profilerLabelStyle = new GUIStyle("OL Label");
+        if(rightAlignedLabel == null) {
+            rightAlignedLabel = new GUIStyle(GUI.skin.label);
+            rightAlignedLabel.alignment = TextAnchor.MiddleRight;
+            rightAlignedLabel.padding = new RectOffset(0, 3, 0, 0);
+        }
+        if(columnHeadersStyleLeft == null) {
+            columnHeadersStyleLeft = new GUIStyle("OL title");
+            columnHeadersStyleLeft.alignment = TextAnchor.MiddleLeft;
+        }
+        if(columnHeadersStyleCentered == null) {
+            columnHeadersStyleCentered = new GUIStyle("OL title");
+            columnHeadersStyleCentered.alignment = TextAnchor.MiddleCenter;
+        }
+        if(evenRowStyle == null) evenRowStyle = new GUIStyle("OL EntryBackEven");
+        if(oddRowStyle == null) oddRowStyle = new GUIStyle("OL EntryBackOdd");
+
         Rect frameTimeGraphTextureRect = EditorGUILayout.GetControlRect(GUILayout.Height(30f));
 
         if(lastWidth != Screen.width) {
@@ -103,6 +122,7 @@ public class SnappyProfilerViewer : EditorWindow {
 
         if(GUIUtility.hotControl == scrubberControlID) {
             switch(current.type) {
+                case EventType.MouseDown:
                 case EventType.MouseDrag:
                 case EventType.MouseUp:
                     SelectedFrame = Mathf.RoundToInt((current.mousePosition.x / Screen.width) * numberOfFrames) + ProfilerDriver.firstFrameIndex;
@@ -116,25 +136,10 @@ public class SnappyProfilerViewer : EditorWindow {
         }
         
         // Frame cursor/scrubber
-        float scrubberLeftOffset = (((float)SelectedFrame - ProfilerDriver.firstFrameIndex) / (numberOfFrames - 1)) * frameTimeGraphTextureRect.width - 2.5f + frameTimeGraphTextureRect.x;
+        float scrubberLeftOffset = (((float)SelectedFrame - ProfilerDriver.firstFrameIndex) / (numberOfFrames - 1)) * 
+            frameTimeGraphTextureRect.width - 2.5f + frameTimeGraphTextureRect.x;
 
         EditorGUI.DrawRect(new Rect(scrubberLeftOffset, frameTimeGraphTextureRect.y, 5f, frameTimeGraphTextureRect.height), Color.grey);
-
-        if(rightAlignedLabel == null) {
-            rightAlignedLabel = new GUIStyle(GUI.skin.label);
-            rightAlignedLabel.alignment = TextAnchor.MiddleRight;
-            rightAlignedLabel.padding = new RectOffset(0, 3, 0, 0);
-        }
-        if(columnHeadersStyleLeft == null) {
-            columnHeadersStyleLeft = new GUIStyle("OL title");
-            columnHeadersStyleLeft.alignment = TextAnchor.MiddleLeft;
-        }
-        if(columnHeadersStyleCentered == null) {
-            columnHeadersStyleCentered = new GUIStyle("OL title");
-            columnHeadersStyleCentered.alignment = TextAnchor.MiddleCenter;
-        }
-        if(evenRowStyle == null) evenRowStyle = new GUIStyle("OL EntryBackEven");
-        if(oddRowStyle == null) oddRowStyle = new GUIStyle("OL EntryBackOdd");
         
         if(ProfilerDriver.firstFrameIndex == -1) {
             EditorGUILayout.HelpBox("Begin profiling to have data to view.", MessageType.Warning);
@@ -175,26 +180,56 @@ public class SnappyProfilerViewer : EditorWindow {
 
         int firstVisibleProperty = Mathf.Max(Mathf.CeilToInt(scrollPosition.y / cellHeight) - 1, 0);
         int lastVisibleProperty = Mathf.Min(firstVisibleProperty + Mathf.CeilToInt(scrollViewRect.height / cellHeight + 1), cachedProfilerProperties.Count);
-        
-        if(Event.current.type == EventType.Repaint) {
-            for(int i = firstVisibleProperty; i < lastVisibleProperty; i++) {
-                cellTopOffset = i * cellHeight + columnHeadersRect.y + cellHeight + 2f;
 
-                // Background
-                GUIStyle backgroundStyle = (i % 2 == 0 ? evenRowStyle : oddRowStyle);
-                backgroundStyle.Draw(new Rect(0f, cellTopOffset, scrollViewRect.width, cellHeight), GUIContent.none, 0);
+        bool selectRows = false;
 
-                cellLeftOffset = (cachedProfilerProperties[i].depth - 1) * 15f + 4f;
-                functionNameCellWidth = functionNameHeaderWidth - (cachedProfilerProperties[i].depth - 1) * 15f;
-
-                DrawDataCell(cachedProfilerProperties[i].functionName, functionNameCellWidth, GUI.skin.label);
-                DrawDataCell(cachedProfilerProperties[i].totalPercent, numericalDataColumnWidth, rightAlignedLabel);
-                DrawDataCell(cachedProfilerProperties[i].selfPercent, numericalDataColumnWidth, rightAlignedLabel);
-                DrawDataCell(cachedProfilerProperties[i].calls, numericalDataColumnWidth, rightAlignedLabel);
-                DrawDataCell(cachedProfilerProperties[i].gcMemory, numericalDataColumnWidth, rightAlignedLabel);
-                DrawDataCell(cachedProfilerProperties[i].totalTime, numericalDataColumnWidth, rightAlignedLabel);
-                DrawDataCell(cachedProfilerProperties[i].selfTime, numericalDataColumnWidth, rightAlignedLabel);
+        // Check if the first visible property is a child of a selected property, to make sure it is also selected
+        if(selectedProperty < firstVisibleProperty) {
+            selectRows = true;
+            for(int i = selectedProperty + 1; i < firstVisibleProperty; i++) {
+                if(cachedProfilerProperties[i].depth <= cachedProfilerProperties[selectedProperty].depth) {
+                    selectRows = false;
+                    break;
+                }
             }
+        }
+
+        for(int i = firstVisibleProperty; i < lastVisibleProperty; i++) {
+            cellTopOffset = i * cellHeight + columnHeadersRect.y + cellHeight + 2f;
+
+            // Background
+            GUIStyle backgroundStyle = (i % 2 == 0 ? evenRowStyle : oddRowStyle);
+            Rect cellRect = new Rect(0f, cellTopOffset, scrollViewRect.width, cellHeight);
+            
+            if(current.type == EventType.MouseDown) {
+                if(cellRect.Contains(current.mousePosition)) {
+                    selectedProperty = i;
+                    Repaint();
+                }
+            }
+            
+            if(Event.current.type != EventType.Repaint) continue;
+
+            if(i == selectedProperty) {
+                selectRows = true;
+            } else if(selectRows) {
+                if(cachedProfilerProperties[i].depth <= cachedProfilerProperties[selectedProperty].depth) {
+                    selectRows = false;
+                }
+            }
+
+            backgroundStyle.Draw(cellRect, GUIContent.none, false, false, selectRows, false);
+
+            cellLeftOffset = (cachedProfilerProperties[i].depth - 1) * 15f + 4f;
+            functionNameCellWidth = functionNameHeaderWidth - (cachedProfilerProperties[i].depth - 1) * 15f;
+
+            DrawDataCell(cachedProfilerProperties[i].functionName, functionNameCellWidth, GUI.skin.label, selectRows);
+            DrawDataCell(cachedProfilerProperties[i].totalPercent, numericalDataColumnWidth, rightAlignedLabel, selectRows);
+            DrawDataCell(cachedProfilerProperties[i].selfPercent, numericalDataColumnWidth, rightAlignedLabel, selectRows);
+            DrawDataCell(cachedProfilerProperties[i].calls, numericalDataColumnWidth, rightAlignedLabel, selectRows);
+            DrawDataCell(cachedProfilerProperties[i].gcMemory, numericalDataColumnWidth, rightAlignedLabel, selectRows);
+            DrawDataCell(cachedProfilerProperties[i].totalTime, numericalDataColumnWidth, rightAlignedLabel, selectRows);
+            DrawDataCell(cachedProfilerProperties[i].selfTime, numericalDataColumnWidth, rightAlignedLabel, selectRows);
         }
         GUI.EndScrollView();
     }
@@ -233,15 +268,14 @@ public class SnappyProfilerViewer : EditorWindow {
         for(int f = 0; f < numberOfFrames; f++) {
             float frameTimeNormalized = (frameTimes[f] - minFrameTime) / (maxFrameTime - minFrameTime);
             int leftOffset = Mathf.RoundToInt(((float)f / (numberOfFrames - 1)) * (width - 1));
-            int blurSize = Mathf.CeilToInt(Mathf.Pow(frameTimeNormalized * frameSize, 3f));
-
-            if(blurSize <= 3) frameTimeNormalized = 0;
-
+            int blurSize = Mathf.CeilToInt(Mathf.Pow(frameTimeNormalized * frameSize, 1.5f));
+            blurSize = Mathf.Max(blurSize, 4); // Force the blur size to be at least 4
+            
             for(int b = -blurSize; b < blurSize; b++) {
                 if(leftOffset + b < 0 || leftOffset + b >= width) continue;
 
                 float blurOffset = (blurSize - Mathf.Abs((float)b)) / blurSize;
-                bloom[leftOffset + b] += Mathf.Pow(blurOffset, 4f) * frameTimeNormalized; 
+                bloom[leftOffset + b] += Mathf.Pow(blurOffset, 3f) * frameTimeNormalized; 
             }
         }
 
@@ -259,8 +293,8 @@ public class SnappyProfilerViewer : EditorWindow {
         frameTimeGraphTexture.Apply();
     }
 
-    private void DrawDataCell(string data, float width, GUIStyle style) {
-        EditorGUI.LabelField(new Rect(cellLeftOffset, cellTopOffset, width, cellHeight), data, style);
+    private void DrawDataCell(string data, float width, GUIStyle style, bool selected) {
+        profilerLabelStyle.Draw(new Rect(cellLeftOffset, cellTopOffset, width, cellHeight), data, false, false, false, selected);
         cellLeftOffset += width;
     }
 
