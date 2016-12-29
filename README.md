@@ -17,3 +17,10 @@ Motivation
 For multiple years I have needed to profile "large" frames of data. Unity's profiler can take upwards of 30 seconds to respond to input in these circumstances. Not only that, but it never gets any better, it seems that the Unity profiler continously retrieves the frame data from C++ to Mono, which can take a second or so depending on how much data there is. The Unity profiler seems to also be issuing commands to draw UI elements which aren't visible, which might account for the extra time it takes.
 
 There is a decently sized forum post about it: ["Why is Unity's profiler so slow and unresponsive in a frame that has a lot of data?"](https://forum.unity3d.com/threads/why-is-unitys-profiler-so-slow-and-unresponsive-in-a-frame-that-has-a-lot-of-data.377358/)
+
+Known Issues
+---
+- Interface is almost complete, but it a little ugly at the moment.
+- I haven't had the time to tidy up all source code - there might be dead code and/or other not so good stuff.
+- Resizing the window a lot seems to make Unity crash - an internal error related to disposing of the "ProfilerHierarchy".
+- Profiling on external devices and such is not test (though it may work fine as it is)
