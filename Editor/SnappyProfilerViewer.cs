@@ -16,7 +16,6 @@ public class SnappyProfilerViewer : EditorWindow {
     private static GUIStyle profilerLabelStyle, rightAlignedLabel, columnHeadersStyleLeft, columnHeadersStyleCentered, evenRowStyle, oddRowStyle;
 
     private List<ProfilerRowInfo> cachedProfilerProperties = new List<ProfilerRowInfo>();
-    private ProfilerProperty profilerProperty;
     private int selectedFrame = 0;
     private int SelectedFrame {
         get {
@@ -81,9 +80,11 @@ public class SnappyProfilerViewer : EditorWindow {
         if(evenRowStyle == null) evenRowStyle = new GUIStyle("OL EntryBackEven");
         if(oddRowStyle == null) oddRowStyle = new GUIStyle("OL EntryBackOdd");
 
+        Event current = Event.current;
+
         Rect frameTimeGraphTextureRect = EditorGUILayout.GetControlRect(GUILayout.Height(30f));
 
-        if(lastWidth != Screen.width) {
+        if(current.type == EventType.Repaint && lastWidth != Screen.width) {
             if(lastWidth == -1) {
                 lastWidth = Screen.width;
             } else {
@@ -91,8 +92,6 @@ public class SnappyProfilerViewer : EditorWindow {
                 UpdateFrameScrubberGraph((int)frameTimeGraphTextureRect.width);
             }
         }
-
-        Event current = Event.current;
         
         if(current.type != EventType.Layout && (ProfilerDriver.firstFrameIndex != previousFirstFrameIndex || ProfilerDriver.lastFrameIndex != previousLastFrameIndex)) {
             previousFirstFrameIndex = ProfilerDriver.firstFrameIndex;
@@ -142,17 +141,15 @@ public class SnappyProfilerViewer : EditorWindow {
         EditorGUI.DrawRect(new Rect(scrubberLeftOffset, frameTimeGraphTextureRect.y, 5f, frameTimeGraphTextureRect.height), Color.grey);
         
         if(ProfilerDriver.firstFrameIndex == -1) {
-            EditorGUILayout.HelpBox("Begin profiling to have data to view.", MessageType.Warning);
+            EditorGUILayout.HelpBox("There is no profiling data to view. Begin profiling, and then stop profiling when there's frames you wish to view.", MessageType.Warning);
             return;
         }
 
-        if(profilerProperty == null) {
+        if(cachedProfilerProperties == null || cachedProfilerProperties.Count == 0) {
             SelectedFrame = ProfilerDriver.firstFrameIndex;
             UpdateProperties();
         }
         
-        if(profilerProperty.frameDataReady == false) return;
-
         EditorGUILayout.LabelField("Properties", cachedProfilerProperties.Count.ToString("N0"));
         
         cellHeight = GUI.skin.label.CalcHeight(new GUIContent("Rubbish"), 200f);
@@ -308,7 +305,7 @@ public class SnappyProfilerViewer : EditorWindow {
     }
 
     private void UpdateProperties() {
-        profilerProperty = new ProfilerProperty();
+        ProfilerProperty profilerProperty = new ProfilerProperty();
         profilerProperty.SetRoot(SelectedFrame, columnToSort, ProfilerViewType.Hierarchy);
         profilerProperty.onlyShowGPUSamples = false;
 
