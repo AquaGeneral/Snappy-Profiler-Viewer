@@ -13,7 +13,7 @@ public class SnappyProfilerViewer : EditorWindow {
     private const float numericalDataColumnWidth = 75f;
 
     private static readonly int scrubberHash = "Scrubber".GetHashCode();
-    private static GUIStyle profilerLabelStyle, rightAlignedLabel, columnHeadersStyleLeft, columnHeadersStyleCentered, evenRowStyle, oddRowStyle;
+    private static GUIStyle labelStyle, rightAlignedLabel, columnHeadersStyleLeft, columnHeadersStyleCentered, evenRowStyle, oddRowStyle;
 
     private List<ProfilerRowInfo> cachedProfilerProperties = new List<ProfilerRowInfo>();
     private int selectedFrame = 0;
@@ -63,11 +63,11 @@ public class SnappyProfilerViewer : EditorWindow {
         /**
         * GUIStyles initialization
         */
-        if(profilerLabelStyle == null) profilerLabelStyle = new GUIStyle("OL Label");
+        if(labelStyle == null) labelStyle = new GUIStyle("OL Label");
         if(rightAlignedLabel == null) {
-            rightAlignedLabel = new GUIStyle(GUI.skin.label);
+            rightAlignedLabel = new GUIStyle("OL Label");
             rightAlignedLabel.alignment = TextAnchor.MiddleRight;
-            rightAlignedLabel.padding = new RectOffset(0, 3, 0, 0);
+            rightAlignedLabel.padding = new RectOffset(0, 5, 0, 0);
         }
         if(columnHeadersStyleLeft == null) {
             columnHeadersStyleLeft = new GUIStyle("OL title");
@@ -166,7 +166,7 @@ public class SnappyProfilerViewer : EditorWindow {
         DrawColumnHeader("Function Name", ProfilerColumn.FunctionName, functionNameHeaderWidth, columnHeadersStyleLeft);
         DrawColumnHeader("Total %", ProfilerColumn.TotalPercent, numericalDataColumnWidth, columnHeadersStyleCentered);
         DrawColumnHeader("Self %", ProfilerColumn.SelfPercent, numericalDataColumnWidth, columnHeadersStyleCentered);
-        DrawColumnHeader("Calls %", ProfilerColumn.Calls, numericalDataColumnWidth, columnHeadersStyleCentered);
+        DrawColumnHeader("Calls", ProfilerColumn.Calls, numericalDataColumnWidth, columnHeadersStyleCentered);
         DrawColumnHeader("GC Alloc", ProfilerColumn.GCMemory, numericalDataColumnWidth, columnHeadersStyleCentered);
         DrawColumnHeader("Total Time", ProfilerColumn.TotalTime, numericalDataColumnWidth, columnHeadersStyleCentered);
         DrawColumnHeader("Self Time", ProfilerColumn.SelfTime, numericalDataColumnWidth, columnHeadersStyleCentered);
@@ -220,7 +220,7 @@ public class SnappyProfilerViewer : EditorWindow {
             cellLeftOffset = (cachedProfilerProperties[i].depth - 1) * 15f + 4f;
             functionNameCellWidth = functionNameHeaderWidth - (cachedProfilerProperties[i].depth - 1) * 15f;
 
-            DrawDataCell(cachedProfilerProperties[i].functionName, functionNameCellWidth, GUI.skin.label, selectRows);
+            DrawDataCell(cachedProfilerProperties[i].functionName, functionNameCellWidth, labelStyle, selectRows);
             DrawDataCell(cachedProfilerProperties[i].totalPercent, numericalDataColumnWidth, rightAlignedLabel, selectRows);
             DrawDataCell(cachedProfilerProperties[i].selfPercent, numericalDataColumnWidth, rightAlignedLabel, selectRows);
             DrawDataCell(cachedProfilerProperties[i].calls, numericalDataColumnWidth, rightAlignedLabel, selectRows);
@@ -291,7 +291,7 @@ public class SnappyProfilerViewer : EditorWindow {
     }
 
     private void DrawDataCell(string data, float width, GUIStyle style, bool selected) {
-        profilerLabelStyle.Draw(new Rect(cellLeftOffset, cellTopOffset, width, cellHeight), data, false, false, false, selected);
+        style.Draw(new Rect(cellLeftOffset, cellTopOffset, width, cellHeight), data, false, false, false, selected);
         cellLeftOffset += width;
     }
 
