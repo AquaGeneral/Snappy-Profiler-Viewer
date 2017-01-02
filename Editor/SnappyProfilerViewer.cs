@@ -39,8 +39,8 @@ public class SnappyProfilerViewer : EditorWindow {
             UpdateProperties();
         }
     }
-    
-    private float cellHeight;
+
+    private const float cellHeight = 16f;
     private Rect columnHeadersRect;
     private float headerLeftOffset = 0f;
     private float cellTopOffset;
@@ -82,26 +82,25 @@ public class SnappyProfilerViewer : EditorWindow {
 
         Event current = Event.current;
 
-        Rect frameTimeGraphTextureRect = EditorGUILayout.GetControlRect(GUILayout.Height(30f));
-
         if(current.type == EventType.Repaint && lastWidth != Screen.width) {
             if(lastWidth == -1) {
                 lastWidth = Screen.width;
             } else {
                 lastWidth = Screen.width;
-                UpdateFrameScrubberGraph((int)frameTimeGraphTextureRect.width);
+                UpdateFrameScrubberGraph(Screen.width);
             }
         }
         
         if(current.type != EventType.Layout && (ProfilerDriver.firstFrameIndex != previousFirstFrameIndex || ProfilerDriver.lastFrameIndex != previousLastFrameIndex)) {
             previousFirstFrameIndex = ProfilerDriver.firstFrameIndex;
             previousLastFrameIndex = ProfilerDriver.lastFrameIndex;
-            UpdateFrameScrubberGraph((int)frameTimeGraphTextureRect.width);
+            UpdateFrameScrubberGraph(Screen.width);
         }
 
         /**
         * Frame scrubber and frame time colour graph
         */
+        Rect frameTimeGraphTextureRect = new Rect(0f, 0f, Screen.width, 30f);
         int scrubberControlID = GUIUtility.GetControlID(scrubberHash, FocusType.Keyboard, frameTimeGraphTextureRect);
         int numberOfFrames = ProfilerDriver.lastFrameIndex - ProfilerDriver.firstFrameIndex;
         
@@ -133,10 +132,9 @@ public class SnappyProfilerViewer : EditorWindow {
                 if(current.keyCode == KeyCode.RightArrow) SelectedFrame = Mathf.Min(SelectedFrame + 1, ProfilerDriver.lastFrameIndex);
             }
         }
-        
+
         // Frame cursor/scrubber
-        float scrubberLeftOffset = (((float)SelectedFrame - ProfilerDriver.firstFrameIndex) / (numberOfFrames - 1)) * 
-            frameTimeGraphTextureRect.width - 2.5f + frameTimeGraphTextureRect.x;
+        float scrubberLeftOffset = (((float)SelectedFrame - ProfilerDriver.firstFrameIndex) / numberOfFrames) * frameTimeGraphTextureRect.width - 2.5f;
 
         EditorGUI.DrawRect(new Rect(scrubberLeftOffset, frameTimeGraphTextureRect.y, 5f, frameTimeGraphTextureRect.height), Color.grey);
         
@@ -149,30 +147,26 @@ public class SnappyProfilerViewer : EditorWindow {
             SelectedFrame = ProfilerDriver.firstFrameIndex;
             UpdateProperties();
         }
-        
-        EditorGUILayout.LabelField("Properties", cachedProfilerProperties.Count.ToString("N0"));
-        
-        cellHeight = GUI.skin.label.CalcHeight(new GUIContent("Rubbish"), 200f);
 
         /**
         * Draw the column headers
         */
-        headerLeftOffset = 0f;
-        columnHeadersRect = EditorGUILayout.GetControlRect(GUILayout.ExpandWidth(true));
-        columnHeadersRect.width -= 15f; // Account for the width of the vertical scrollbar
+        columnHeadersRect = new Rect(0f, frameTimeGraphTextureRect.yMax, Screen.width - 15f, columnHeadersStyleCentered.fixedHeight);
         float functionNameHeaderWidth = columnHeadersRect.width - numericalDataColumnWidth * 6f;
         float columnHeadersLeft = columnHeadersRect.x;
-        
+
+        headerLeftOffset = 0f;
         DrawColumnHeader("Function Name", ProfilerColumn.FunctionName, functionNameHeaderWidth, columnHeadersStyleLeft);
         DrawColumnHeader("Total %", ProfilerColumn.TotalPercent, numericalDataColumnWidth, columnHeadersStyleCentered);
         DrawColumnHeader("Self %", ProfilerColumn.SelfPercent, numericalDataColumnWidth, columnHeadersStyleCentered);
         DrawColumnHeader("Calls", ProfilerColumn.Calls, numericalDataColumnWidth, columnHeadersStyleCentered);
         DrawColumnHeader("GC Alloc", ProfilerColumn.GCMemory, numericalDataColumnWidth, columnHeadersStyleCentered);
-        DrawColumnHeader("Total Time", ProfilerColumn.TotalTime, numericalDataColumnWidth, columnHeadersStyleCentered);
-        DrawColumnHeader("Self Time", ProfilerColumn.SelfTime, numericalDataColumnWidth, columnHeadersStyleCentered);
+        DrawColumnHeader("Total ms", ProfilerColumn.TotalTime, numericalDataColumnWidth, columnHeadersStyleCentered);
+        DrawColumnHeader("Self ms", ProfilerColumn.SelfTime, numericalDataColumnWidth, columnHeadersStyleCentered);
         
-        Rect scrollViewRect = EditorGUILayout.GetControlRect(new GUILayoutOption[] { GUILayout.ExpandWidth(true), GUILayout.ExpandHeight(true) });
-        Rect viewRect = new Rect(scrollViewRect.x, scrollViewRect.y, scrollViewRect.width, cellHeight * cachedProfilerProperties.Count);
+        Rect scrollViewRect = new Rect(0f, Mathf.Ceil(columnHeadersRect.yMax + 1f), Screen.width, Screen.height - columnHeadersRect.yMax - 24);
+
+        Rect viewRect = new Rect(scrollViewRect.x, scrollViewRect.y, scrollViewRect.width - 15f, cellHeight * cachedProfilerProperties.Count);
         scrollPosition = GUI.BeginScrollView(scrollViewRect, scrollPosition, viewRect);
 
         int firstVisibleProperty = Mathf.Max(Mathf.CeilToInt(scrollPosition.y / cellHeight) - 1, 0);
@@ -195,7 +189,6 @@ public class SnappyProfilerViewer : EditorWindow {
             cellTopOffset = i * cellHeight + columnHeadersRect.y + cellHeight + 2f;
 
             // Background
-            GUIStyle backgroundStyle = (i % 2 == 0 ? evenRowStyle : oddRowStyle);
             Rect cellRect = new Rect(0f, cellTopOffset, scrollViewRect.width, cellHeight);
             
             if(current.type == EventType.MouseDown) {
@@ -215,6 +208,7 @@ public class SnappyProfilerViewer : EditorWindow {
                 }
             }
 
+            GUIStyle backgroundStyle = (i % 2 == 0 ? evenRowStyle : oddRowStyle);
             backgroundStyle.Draw(cellRect, GUIContent.none, false, false, selectRows, false);
 
             cellLeftOffset = (cachedProfilerProperties[i].depth - 1) * 15f + 4f;
@@ -264,7 +258,7 @@ public class SnappyProfilerViewer : EditorWindow {
 
         for(int f = 0; f < numberOfFrames; f++) {
             float frameTimeNormalized = (frameTimes[f] - minFrameTime) / (maxFrameTime - minFrameTime);
-            int leftOffset = Mathf.RoundToInt(((float)f / (numberOfFrames - 1)) * (width - 1));
+            int leftOffset = Mathf.RoundToInt(((float)f / numberOfFrames) * width);
             int blurSize = Mathf.CeilToInt(Mathf.Pow(frameTimeNormalized * frameSize, 1.5f));
             blurSize = Mathf.Max(blurSize, 4); // Force the blur size to be at least 4
             
