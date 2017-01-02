@@ -1,5 +1,5 @@
 # Snappy Profiler Viewer
-<img src="https://dl.dropboxusercontent.com/u/900723/SnappyProfilerViewerScreenshot.png" width="726" height="313">
+<img src="https://dl.dropboxusercontent.com/u/900723/SnappyProfilerViewerScreenshot.png"d>
 
 A simple profiler viewer for Unity that can display CPU frames. It handles with ease the kind of load that Unity's profiler struggles to display at more than 1fps.
 
@@ -20,10 +20,9 @@ There is a decently sized forum post about it: ["Why is Unity's profiler so slow
 
 Known Issues
 ---
-- Interface is almost complete, but it a little ugly at the moment.
 - I haven't had the time to tidy up all source code - there might be dead code and/or other not so good stuff.
 - Resizing the window a lot seems to make Unity crash - an internal error related to disposing of the "ProfilerHierarchy".
-- Profiling on external devices and such is not test (though it may work fine as it is)
+- Profiling on external devices and such hasn't been tested (though it may work fine as it is).
 
 License
 ---
