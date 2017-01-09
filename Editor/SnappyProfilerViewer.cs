@@ -185,6 +185,9 @@ public class SnappyProfilerViewer : EditorWindow {
             }
         }
 
+        /**
+        * Draw the data
+        */
         for(int i = firstVisibleProperty; i < lastVisibleProperty; i++) {
             cellTopOffset = i * cellHeight + columnHeadersRect.y + cellHeight + 2f;
 
@@ -241,6 +244,7 @@ public class SnappyProfilerViewer : EditorWindow {
         float minFrameTime = float.MaxValue;
         float maxFrameTime = float.MinValue;
 
+        // Calculate the total frame time and the minimum and maximum frame times.
         for(int f = 0; f < numberOfFrames; f++) {
             ProfilerProperty property = new ProfilerProperty();
             property.SetRoot(f + ProfilerDriver.firstFrameIndex, ProfilerColumn.DontSort, ProfilerViewType.RawHierarchy);
@@ -253,14 +257,14 @@ public class SnappyProfilerViewer : EditorWindow {
         }
 
         float frameSize = width / (numberOfFrames - 1f);
-
         float[] bloom = new float[width];
 
+        // Create an intense neon look based on the maximum frame time out of the current samples.
         for(int f = 0; f < numberOfFrames; f++) {
             float frameTimeNormalized = (frameTimes[f] - minFrameTime) / (maxFrameTime - minFrameTime);
             int leftOffset = Mathf.RoundToInt(((float)f / numberOfFrames) * width);
             int blurSize = Mathf.CeilToInt(Mathf.Pow(frameTimeNormalized * frameSize, 1.5f));
-            blurSize = Mathf.Max(blurSize, 4); // Force the blur size to be at least 4
+            blurSize = Mathf.Max(blurSize, 4);
             
             for(int b = -blurSize; b < blurSize; b++) {
                 if(leftOffset + b < 0 || leftOffset + b >= width) continue;
@@ -269,7 +273,7 @@ public class SnappyProfilerViewer : EditorWindow {
                 bloom[leftOffset + b] += Mathf.Pow(blurOffset, 3f) * frameTimeNormalized; 
             }
         }
-
+        
         for(int i = 0; i < width; i++) {
             float brightness;
             if(bloom[i] < 0.6f) {
