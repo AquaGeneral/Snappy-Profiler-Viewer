@@ -148,10 +148,23 @@ public class SnappyProfilerViewer : EditorWindow {
             UpdateProperties();
         }
 
+        // Frame statistics
+        Rect frameStatisticsRowRect = new Rect(0f, frameTimeGraphTextureRect.yMax, Screen.width, 20f);
+        GUI.Label(new Rect(0f, frameStatisticsRowRect.y, 30f, 20f), ProfilerDriver.firstFrameIndex.ToString());
+
+        GUIStyle rightAlignedStandardLabel = new GUIStyle(GUI.skin.label);
+        rightAlignedStandardLabel.alignment = TextAnchor.MiddleRight;
+        GUI.Label(new Rect(Screen.width - 30f, frameStatisticsRowRect.y, 30f, 20f), ProfilerDriver.lastFrameIndex.ToString(), rightAlignedStandardLabel);
+
+        GUIStyle centeredLabel = new GUIStyle(GUI.skin.label);
+        centeredLabel.alignment = TextAnchor.MiddleCenter;
+        GUI.Label(new Rect((((float)SelectedFrame - ProfilerDriver.firstFrameIndex) / numberOfFrames) * Screen.width - 15f, 
+            frameStatisticsRowRect.y, 30f, 20f), SelectedFrame.ToString(), centeredLabel);
+
         /**
         * Draw the column headers
         */
-        columnHeadersRect = new Rect(0f, frameTimeGraphTextureRect.yMax, Screen.width - 15f, columnHeadersStyleCentered.fixedHeight);
+        columnHeadersRect = new Rect(0f, frameStatisticsRowRect.yMax, Screen.width - 15f, columnHeadersStyleCentered.fixedHeight);
         float functionNameHeaderWidth = columnHeadersRect.width - numericalDataColumnWidth * 6f;
         float columnHeadersLeft = columnHeadersRect.x;
 
@@ -243,10 +256,12 @@ public class SnappyProfilerViewer : EditorWindow {
         float[] frameTimes = new float[numberOfFrames];
         float minFrameTime = float.MaxValue;
         float maxFrameTime = float.MinValue;
+        
+        // Make sure ProfilerProperties are never created anew in an inner loop as it will cause Unity to crash while disposing of them.
+        ProfilerProperty property = new ProfilerProperty();
 
         // Calculate the total frame time and the minimum and maximum frame times.
         for(int f = 0; f < numberOfFrames; f++) {
-            ProfilerProperty property = new ProfilerProperty();
             property.SetRoot(f + ProfilerDriver.firstFrameIndex, ProfilerColumn.DontSort, ProfilerViewType.RawHierarchy);
 
             frameTimes[f] = float.Parse(property.frameTime);
@@ -263,7 +278,7 @@ public class SnappyProfilerViewer : EditorWindow {
         for(int f = 0; f < numberOfFrames; f++) {
             float frameTimeNormalized = (frameTimes[f] - minFrameTime) / (maxFrameTime - minFrameTime);
             int leftOffset = Mathf.RoundToInt(((float)f / numberOfFrames) * width);
-            int blurSize = Mathf.CeilToInt(Mathf.Pow(frameTimeNormalized * frameSize, 1.5f));
+            int blurSize = Mathf.CeilToInt(Mathf.Pow(frameTimeNormalized * frameSize, 1.4f));
             blurSize = Mathf.Max(blurSize, 4);
             
             for(int b = -blurSize; b < blurSize; b++) {
@@ -276,8 +291,8 @@ public class SnappyProfilerViewer : EditorWindow {
         
         for(int i = 0; i < width; i++) {
             float brightness;
-            if(bloom[i] < 0.6f) {
-                brightness = bloom[i] / 0.6f;
+            if(bloom[i] < 0.8f) {
+                brightness = bloom[i] / 0.8f;
             } else {
                 brightness = 1f;
             }
