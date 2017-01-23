@@ -10,7 +10,7 @@ using UnityEngine;
 
 public class SnappyProfilerViewer : EditorWindow {
     // The fixed width for the columns such as "Calls" and "Self Time", which are numerical
-    private const float numericalDataColumnWidth = 75f;
+    private const float numericalDataColumnWidth = 70f;
 
     private static readonly int scrubberHash = "Scrubber".GetHashCode();
     private static GUIStyle labelStyle, rightAlignedLabel, columnHeadersStyleLeft, columnHeadersStyleCentered, evenRowStyle, oddRowStyle;
@@ -97,12 +97,25 @@ public class SnappyProfilerViewer : EditorWindow {
             UpdateFrameScrubberGraph(Screen.width);
         }
 
+        int numberOfFrames = ProfilerDriver.lastFrameIndex - ProfilerDriver.firstFrameIndex;
+
+        // Frame timeline header
+        Rect frameTimelineHeaderRect = new Rect(0f, 0f, Screen.width, 15f);
+        GUI.Label(new Rect(0f, frameTimelineHeaderRect.y, 30f, frameTimelineHeaderRect.height), ProfilerDriver.firstFrameIndex.ToString());
+
+        GUIStyle rightAlignedStandardLabel = new GUIStyle(GUI.skin.label);
+        rightAlignedStandardLabel.alignment = TextAnchor.MiddleRight;
+        GUI.Label(new Rect(Screen.width - 30f, frameTimelineHeaderRect.y, 30f, frameTimelineHeaderRect.height), ProfilerDriver.lastFrameIndex.ToString(), rightAlignedStandardLabel);
+
+        GUIStyle centeredLabel = new GUIStyle(GUI.skin.label);
+        centeredLabel.alignment = TextAnchor.MiddleCenter;
+        GUI.Label(new Rect(Screen.width * 0.5f - 100f, frameTimelineHeaderRect.y, 200f, frameTimelineHeaderRect.height), string.Format("Selected: {0}", SelectedFrame), centeredLabel);
+
         /**
         * Frame scrubber and frame time colour graph
         */
-        Rect frameTimeGraphTextureRect = new Rect(0f, 0f, Screen.width, 30f);
+        Rect frameTimeGraphTextureRect = new Rect(0f, frameTimelineHeaderRect.yMax, Screen.width, 30f);
         int scrubberControlID = GUIUtility.GetControlID(scrubberHash, FocusType.Keyboard, frameTimeGraphTextureRect);
-        int numberOfFrames = ProfilerDriver.lastFrameIndex - ProfilerDriver.firstFrameIndex;
         
         if(current.type == EventType.Repaint && frameTimeGraphTexture != null) {
             EditorGUI.DrawPreviewTexture(frameTimeGraphTextureRect, frameTimeGraphTexture);
@@ -134,9 +147,9 @@ public class SnappyProfilerViewer : EditorWindow {
         }
 
         // Frame cursor/scrubber
-        float scrubberLeftOffset = (((float)SelectedFrame - ProfilerDriver.firstFrameIndex) / numberOfFrames) * frameTimeGraphTextureRect.width - 2.5f;
-
-        EditorGUI.DrawRect(new Rect(scrubberLeftOffset, frameTimeGraphTextureRect.y, 5f, frameTimeGraphTextureRect.height), Color.grey);
+        const float scrubberWidth = 3f;
+        float scrubberLeftOffset = (((float)SelectedFrame - ProfilerDriver.firstFrameIndex) / numberOfFrames) * frameTimeGraphTextureRect.width - scrubberWidth * 0.5f;
+        EditorGUI.DrawRect(new Rect(scrubberLeftOffset, frameTimeGraphTextureRect.y, scrubberWidth, frameTimeGraphTextureRect.height), Color.white);
         
         if(ProfilerDriver.firstFrameIndex == -1) {
             EditorGUILayout.HelpBox("There is no profiling data to view. Begin profiling, and then stop profiling when there's frames you wish to view.", MessageType.Warning);
@@ -148,26 +161,26 @@ public class SnappyProfilerViewer : EditorWindow {
             UpdateProperties();
         }
 
-        // Frame statistics
-        Rect frameStatisticsRowRect = new Rect(0f, frameTimeGraphTextureRect.yMax, Screen.width, 20f);
-        GUI.Label(new Rect(0f, frameStatisticsRowRect.y, 30f, 20f), ProfilerDriver.firstFrameIndex.ToString());
-
-        GUIStyle rightAlignedStandardLabel = new GUIStyle(GUI.skin.label);
-        rightAlignedStandardLabel.alignment = TextAnchor.MiddleRight;
-        GUI.Label(new Rect(Screen.width - 30f, frameStatisticsRowRect.y, 30f, 20f), ProfilerDriver.lastFrameIndex.ToString(), rightAlignedStandardLabel);
-
-        GUIStyle centeredLabel = new GUIStyle(GUI.skin.label);
-        centeredLabel.alignment = TextAnchor.MiddleCenter;
-        GUI.Label(new Rect((((float)SelectedFrame - ProfilerDriver.firstFrameIndex) / numberOfFrames) * Screen.width - 15f, 
-            frameStatisticsRowRect.y, 30f, 20f), SelectedFrame.ToString(), centeredLabel);
+        Rect frameStatisticsRect = new Rect(0f, frameTimeGraphTextureRect.yMax, Screen.width, 16f);
+        EditorStyles.toolbar.Draw(frameStatisticsRect, GUIContent.none, 0);
+        ProfilerProperty profilerProperty = new ProfilerProperty();
+        profilerProperty.SetRoot(SelectedFrame, ProfilerColumn.DontSort, ProfilerViewType.RawHierarchy);
+        GUI.Label(new Rect(frameStatisticsRect.x, frameStatisticsRect.y, 200f, frameStatisticsRect.height), "CPU Time: " + profilerProperty.frameTime);
 
         /**
         * Draw the column headers
         */
-        columnHeadersRect = new Rect(0f, frameStatisticsRowRect.yMax, Screen.width - 15f, columnHeadersStyleCentered.fixedHeight);
-        float functionNameHeaderWidth = columnHeadersRect.width - numericalDataColumnWidth * 6f;
-        float columnHeadersLeft = columnHeadersRect.x;
+        Rect scrollViewRect = new Rect(0f, Mathf.Ceil(columnHeadersRect.yMax + 1f), Screen.width, Screen.height - columnHeadersRect.yMax - 24);
+        Rect viewRect = new Rect(scrollViewRect.x, scrollViewRect.y, scrollViewRect.width - 15f, cellHeight * cachedProfilerProperties.Count);
+        bool isHorizontalScrollbarVisible = viewRect.height >= scrollViewRect.height;
 
+        columnHeadersRect = new Rect(0f, frameStatisticsRect.yMax, Screen.width, columnHeadersStyleCentered.fixedHeight);
+        float functionNameHeaderWidth = columnHeadersRect.width - numericalDataColumnWidth * 6f;
+        if(isHorizontalScrollbarVisible) {
+            functionNameHeaderWidth -= 15f;
+        }
+        float columnHeadersLeft = columnHeadersRect.x;
+        
         headerLeftOffset = 0f;
         DrawColumnHeader("Function Name", ProfilerColumn.FunctionName, functionNameHeaderWidth, columnHeadersStyleLeft);
         DrawColumnHeader("Total %", ProfilerColumn.TotalPercent, numericalDataColumnWidth, columnHeadersStyleCentered);
@@ -177,9 +190,6 @@ public class SnappyProfilerViewer : EditorWindow {
         DrawColumnHeader("Total ms", ProfilerColumn.TotalTime, numericalDataColumnWidth, columnHeadersStyleCentered);
         DrawColumnHeader("Self ms", ProfilerColumn.SelfTime, numericalDataColumnWidth, columnHeadersStyleCentered);
         
-        Rect scrollViewRect = new Rect(0f, Mathf.Ceil(columnHeadersRect.yMax + 1f), Screen.width, Screen.height - columnHeadersRect.yMax - 24);
-
-        Rect viewRect = new Rect(scrollViewRect.x, scrollViewRect.y, scrollViewRect.width - 15f, cellHeight * cachedProfilerProperties.Count);
         scrollPosition = GUI.BeginScrollView(scrollViewRect, scrollPosition, viewRect);
 
         int firstVisibleProperty = Mathf.Max(Mathf.CeilToInt(scrollPosition.y / cellHeight) - 1, 0);
@@ -197,6 +207,8 @@ public class SnappyProfilerViewer : EditorWindow {
                 }
             }
         }
+
+        evenRowStyle.Draw(new Rect(0f, columnHeadersRect.yMax, Screen.width, Screen.height - columnHeadersRect.yMax), GUIContent.none, 0);
 
         /**
         * Draw the data
@@ -223,9 +235,8 @@ public class SnappyProfilerViewer : EditorWindow {
                     selectRows = false;
                 }
             }
-
-            GUIStyle backgroundStyle = (i % 2 == 0 ? evenRowStyle : oddRowStyle);
-            backgroundStyle.Draw(cellRect, GUIContent.none, false, false, selectRows, false);
+            
+            if(i % 2 != 0) oddRowStyle.Draw(cellRect, GUIContent.none, false, false, selectRows, false);
 
             cellLeftOffset = (cachedProfilerProperties[i].depth - 1) * 15f + 4f;
             functionNameCellWidth = functionNameHeaderWidth - (cachedProfilerProperties[i].depth - 1) * 15f;
@@ -273,13 +284,13 @@ public class SnappyProfilerViewer : EditorWindow {
 
         float frameSize = width / (numberOfFrames - 1f);
         float[] bloom = new float[width];
-
+        
         // Create an intense neon look based on the maximum frame time out of the current samples.
         for(int f = 0; f < numberOfFrames; f++) {
             float frameTimeNormalized = (frameTimes[f] - minFrameTime) / (maxFrameTime - minFrameTime);
             int leftOffset = Mathf.RoundToInt(((float)f / numberOfFrames) * width);
             int blurSize = Mathf.CeilToInt(Mathf.Pow(frameTimeNormalized * frameSize, 1.4f));
-            blurSize = Mathf.Max(blurSize, 4);
+            blurSize = Mathf.Max(blurSize, Mathf.RoundToInt(frameSize * 1.5f));
             
             for(int b = -blurSize; b < blurSize; b++) {
                 if(leftOffset + b < 0 || leftOffset + b >= width) continue;
