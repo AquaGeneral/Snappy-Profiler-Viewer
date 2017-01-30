@@ -139,10 +139,24 @@ public class SnappyProfilerViewer : EditorWindow {
                     SelectedFrame = Mathf.RoundToInt((current.mousePosition.x / Screen.width) * numberOfFrames) + ProfilerDriver.firstFrameIndex;
                     break;
             }
+        }
 
-            if(current.isKey && current.type != EventType.KeyUp) {
-                if(current.keyCode == KeyCode.LeftArrow) SelectedFrame = Mathf.Max(SelectedFrame - 1, 0);
-                if(current.keyCode == KeyCode.RightArrow) SelectedFrame = Mathf.Min(SelectedFrame + 1, ProfilerDriver.lastFrameIndex);
+        if(current.isKey && current.type != EventType.KeyUp) {
+            switch(current.keyCode) {
+                case KeyCode.LeftArrow:
+                    SelectedFrame = Mathf.Max(SelectedFrame - 1, 0);
+                    break;
+                case KeyCode.RightArrow:
+                    SelectedFrame = Mathf.Min(SelectedFrame + 1, ProfilerDriver.lastFrameIndex);
+                    break;
+                case KeyCode.UpArrow:
+                    selectedProperty = Mathf.Max(selectedProperty - 1, 0);
+                    Repaint();
+                    break;
+                case KeyCode.DownArrow:
+                    selectedProperty = Mathf.Min(selectedProperty + 1, cachedProfilerProperties.Count - 1);
+                    Repaint();
+                    break;
             }
         }
 
@@ -162,7 +176,8 @@ public class SnappyProfilerViewer : EditorWindow {
         }
 
         Rect frameStatisticsRect = new Rect(0f, frameTimeGraphTextureRect.yMax, Screen.width, 16f);
-        EditorStyles.toolbar.Draw(frameStatisticsRect, GUIContent.none, 0);
+        if(current.type == EventType.Repaint) EditorStyles.toolbar.Draw(frameStatisticsRect, GUIContent.none, 0);
+
         ProfilerProperty profilerProperty = new ProfilerProperty();
         profilerProperty.SetRoot(SelectedFrame, ProfilerColumn.DontSort, ProfilerViewType.RawHierarchy);
         GUI.Label(new Rect(frameStatisticsRect.x, frameStatisticsRect.y, 200f, frameStatisticsRect.height), "CPU Time: " + profilerProperty.frameTime);
@@ -208,8 +223,10 @@ public class SnappyProfilerViewer : EditorWindow {
             }
         }
 
-        evenRowStyle.Draw(new Rect(0f, columnHeadersRect.yMax, Screen.width, Screen.height - columnHeadersRect.yMax), GUIContent.none, 0);
-
+        if(current.type == EventType.Repaint) {
+            evenRowStyle.Draw(viewRect, GUIContent.none, 0);
+        }
+        
         /**
         * Draw the data
         */
@@ -230,13 +247,12 @@ public class SnappyProfilerViewer : EditorWindow {
 
             if(i == selectedProperty) {
                 selectRows = true;
-            } else if(selectRows) {
-                if(cachedProfilerProperties[i].depth <= cachedProfilerProperties[selectedProperty].depth) {
-                    selectRows = false;
-                }
+            } else if(selectRows && cachedProfilerProperties[i].depth <= cachedProfilerProperties[selectedProperty].depth) {
+                selectRows = false;
             }
             
-            if(i % 2 != 0) oddRowStyle.Draw(cellRect, GUIContent.none, false, false, selectRows, false);
+            // Draw the odd row style on every odd numbered row. If the row is selected, draw the "On" version of the oddRowStyle to designate them as selected.
+            if(i % 2 != 0 || selectRows) oddRowStyle.Draw(cellRect, GUIContent.none, false, false, selectRows, false);
 
             cellLeftOffset = (cachedProfilerProperties[i].depth - 1) * 15f + 4f;
             functionNameCellWidth = functionNameHeaderWidth - (cachedProfilerProperties[i].depth - 1) * 15f;
@@ -247,7 +263,7 @@ public class SnappyProfilerViewer : EditorWindow {
             DrawDataCell(cachedProfilerProperties[i].calls, numericalDataColumnWidth, rightAlignedLabel, selectRows);
             DrawDataCell(cachedProfilerProperties[i].gcMemory, numericalDataColumnWidth, rightAlignedLabel, selectRows);
             DrawDataCell(cachedProfilerProperties[i].totalTime, numericalDataColumnWidth, rightAlignedLabel, selectRows);
-            DrawDataCell(cachedProfilerProperties[i].selfTime, numericalDataColumnWidth, rightAlignedLabel, selectRows);
+            DrawDataCell(cachedProfilerProperties[i].selfTime, numericalDataColumnWidth - 2f, rightAlignedLabel, selectRows);
         }
         GUI.EndScrollView();
     }
@@ -287,23 +303,23 @@ public class SnappyProfilerViewer : EditorWindow {
         
         // Create an intense neon look based on the maximum frame time out of the current samples.
         for(int f = 0; f < numberOfFrames; f++) {
-            float frameTimeNormalized = (frameTimes[f] - minFrameTime) / (maxFrameTime - minFrameTime);
+            float frameTimeCoefficient = (frameTimes[f] - minFrameTime) / (maxFrameTime - minFrameTime);
             int leftOffset = Mathf.RoundToInt(((float)f / numberOfFrames) * width);
-            int blurSize = Mathf.CeilToInt(Mathf.Pow(frameTimeNormalized * frameSize, 1.4f));
-            blurSize = Mathf.Max(blurSize, Mathf.RoundToInt(frameSize * 1.5f));
+            int blurSize = Mathf.RoundToInt(Mathf.Exp(frameTimeCoefficient * 0.3f));
+            blurSize = Mathf.Max(blurSize, Mathf.RoundToInt(frameSize * 2f));
             
             for(int b = -blurSize; b < blurSize; b++) {
                 if(leftOffset + b < 0 || leftOffset + b >= width) continue;
 
                 float blurOffset = (blurSize - Mathf.Abs((float)b)) / blurSize;
-                bloom[leftOffset + b] += Mathf.Pow(blurOffset, 3f) * frameTimeNormalized; 
+                bloom[leftOffset + b] += Mathf.Pow(blurOffset, 5f) * frameTimeCoefficient; 
             }
         }
         
         for(int i = 0; i < width; i++) {
             float brightness;
-            if(bloom[i] < 0.8f) {
-                brightness = bloom[i] / 0.8f;
+            if(bloom[i] < 0.9f) {
+                brightness = bloom[i] / 0.9f;
             } else {
                 brightness = 1f;
             }
@@ -334,7 +350,6 @@ public class SnappyProfilerViewer : EditorWindow {
         profilerProperty.onlyShowGPUSamples = false;
 
         cachedProfilerProperties.Clear();
-
         while(profilerProperty.Next(true)) {
             cachedProfilerProperties.Add(new ProfilerRowInfo(profilerProperty));
         }
