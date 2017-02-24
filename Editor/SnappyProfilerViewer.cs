@@ -12,7 +12,7 @@ public class SnappyProfilerViewer : EditorWindow {
     // The fixed width for the columns such as "Calls" and "Self Time", which are numerical
     private const float numericalDataColumnWidth = 70f;
 
-    private static readonly int scrubberHash = "Scrubber".GetHashCode();
+    private static readonly int scrubberHash = "SnappyProfilerViewScrubber".GetHashCode();
     private static GUIStyle labelStyle, rightAlignedLabel, columnHeadersStyleLeft, columnHeadersStyleCentered, evenRowStyle, oddRowStyle;
 
     private List<ProfilerRowInfo> cachedProfilerProperties = new List<ProfilerRowInfo>();
@@ -186,9 +186,10 @@ public class SnappyProfilerViewer : EditorWindow {
         * Draw the column headers
         */
         Rect scrollViewRect = new Rect(0f, Mathf.Ceil(columnHeadersRect.yMax + 1f), Screen.width, Screen.height - columnHeadersRect.yMax - 24);
-        Rect viewRect = new Rect(scrollViewRect.x, scrollViewRect.y, scrollViewRect.width - 15f, cellHeight * cachedProfilerProperties.Count);
+        Rect viewRect = new Rect(scrollViewRect.x, scrollViewRect.y, scrollViewRect.width, cellHeight * cachedProfilerProperties.Count);
         bool isHorizontalScrollbarVisible = viewRect.height >= scrollViewRect.height;
-
+        viewRect.width -= isHorizontalScrollbarVisible ? 15f : 0f;
+        
         columnHeadersRect = new Rect(0f, frameStatisticsRect.yMax, Screen.width, columnHeadersStyleCentered.fixedHeight);
         float functionNameHeaderWidth = columnHeadersRect.width - numericalDataColumnWidth * 6f;
         if(isHorizontalScrollbarVisible) {
